@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 
-int main(){
+int main(int argc, char **argv){
   struct sockaddr_in server;
   server.sin_family = AF_INET;
   server.sin_port = htons(2015);
@@ -16,21 +16,21 @@ int main(){
   // создаем сокет
   int sock;
   if((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-    printf("Error create!\n");
+    perror("Ошибка create()");
     return -1;
   }
   // соединяемся с сервером
   if(connect(sock, (struct sockaddr*)&server, sizeof(server)) == -1){
-    printf("Error connect!\n");
-  }
-  // отправка сообщения
-  send(sock, "Hello", 6, 0);
-  char buf[255];
-  if(recv(sock, buf, sizeof(buf), 0) < 0){
-    printf("Error recv");
+    perror("Ошибка connect()");
     return -1;
   }
-  printf("Сервер: %s\n",buf);
+
+  char buf[255] = "Hello From Client #";
+  sprintf(buf,"%s%s",buf,argv[1]);
+  while(1){
+    send(sock, buf, strlen(buf), 0);
+    sleep(atoi(argv[1]));
+  }
   close(sock);
   return 0;
 }

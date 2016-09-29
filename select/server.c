@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/select.h>
 #include <sys/time.h>
 
@@ -13,7 +15,7 @@ int main(){
   int sock;
   // создание сокета
   if((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-    printf("Error create!\n");
+    perror("Ошибка create()");
     return -1;
   }
   // структура для сервера
@@ -22,41 +24,59 @@ int main(){
   server.sin_port = htons((u_short)2015); // порт сервера
   // связка
   if(bind(sock, (struct sockaddr*)&server, sizeof(server)) == -1){
-    printf("Error bind!\n");
+    perror("Ошибка bind()");
     return -1;
   }
-  // объявляем готовность к соединению
+  printf("Порт сервера: %d\n",ntohs(server.sin_port));
+
   if(listen(sock,5)==-1){
-    printf("Error listen!\n");
+    perror("Ошибка listen()");
     return -1;
   }
-  int newsock, clnlen; // сокеты для клиентов
-  
+
+  int numClient = 0, i;
+  int clients[1000];
   while(1){
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(sock, &fds);
+    int max = sock;
+    for(i = 0; i < numClient; i++){
+      FD_SET(clients[i], &fds);
+      if(clients[i] > max) max = clients[i];
+    }
     struct timeval tv;
-    tv.tv_sec = 5;
+    tv.tv_sec = 1;
     tv.tv_usec = 0;
-    int ret = select(sock + 1, &fds, NULL, NULL, &tv);
-    if(ret == -1){
-      printf("Error select()!\n");
+    int rel = select(max + 1, &fds, NULL, NULL, &tv);
+    if(rel == -1){
+      perror("Ошибка select()");
       return -1;
     }
     if(FD_ISSET(sock, &fds)){
-      printf("Соединение с сервером!\n");
-      if((newsock = accept(sock, (struct sockaddr*)&client, &clnlen)) == -1){ // подключаем нового пользователя
-        printf("Error accept!\n");
+      int newsock, clnlen;
+      if((newsock = accept(sock, (struct sockaddr*)&client, &clnlen)) == -1){
+        perror("Ошибка accept()");
         return -1;
       }
-      printf("Данные: ");
-      int size;
-      char buf[255];
-      size = recv(newsock, buf, sizeof(buf), 0); // пока получаем от клиента
-      send(newsock, buf, sizeof(buf), 0); // отправляем эхо
+      clients[numClient] = newsock;
+      numClient++;
+      printf("Новый клиент с порта %d!\n",ntohs(client.sin_port));
+
+      char buf[255] = "";
+      memset(buf,0,255);
+      int size = recv(newsock, buf, sizeof(buf), 0);
       printf("%s\n",buf);
-      close(newsock); // отключаем пользователя, т.к. он нам больше не нужен
+    } else {
+      for(i = 0; i < numClient; i++){
+        if(FD_ISSET(clients[i], &fds)){
+          char buf[255] = "";
+          memset(buf,0,255);
+          int size = recv(clients[i], buf, sizeof(buf), 0);
+          printf("Клиент опять прислал: %s\n",buf);
+          break;
+        }
+      }
     }
   }
   close(sock);
